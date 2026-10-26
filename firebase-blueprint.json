@@ -1,0 +1,226 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile with role and anonymous alias",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "User full name",
+          "maxLength": 100
+        },
+        "email": {
+          "type": "string",
+          "description": "User email address",
+          "maxLength": 150
+        },
+        "role": {
+          "type": "string",
+          "description": "Assigned user role",
+          "enum": ["student", "teacher", "admin"]
+        },
+        "alias": {
+          "type": "string",
+          "description": "Anonymous alias for the student (e.g. Curious Panda 42)",
+          "maxLength": 50
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Creation timestamp ISO string"
+        }
+      },
+      "required": ["name", "email", "role", "alias", "createdAt"]
+    },
+    "Doubt": {
+      "title": "Doubt",
+      "description": "College student doubt / question posting",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "UID of the creator",
+          "maxLength": 128
+        },
+        "questionText": {
+          "type": "string",
+          "description": "Detailed text of the doubt",
+          "maxLength": 3000
+        },
+        "subject": {
+          "type": "string",
+          "description": "Academic subject / department",
+          "maxLength": 80
+        },
+        "predictedTopic": {
+          "type": "string",
+          "description": "Topic or concept tag",
+          "maxLength": 100
+        },
+        "topicConfidence": {
+          "type": "number",
+          "description": "Confidence score for topic classification"
+        },
+        "imageUrl": {
+          "type": "string",
+          "description": "Optional image URL for diagram or equation",
+          "maxLength": 2048
+        },
+        "isAnonymous": {
+          "type": "boolean",
+          "description": "Whether to hide student identity from peers"
+        },
+        "authorAlias": {
+          "type": "string",
+          "description": "Anonymous alias of the author shown to students",
+          "maxLength": 50
+        },
+        "authorName": {
+          "type": "string",
+          "description": "Real author name visible to teachers and admin",
+          "maxLength": 100
+        },
+        "authorEmail": {
+          "type": "string",
+          "description": "Real author email visible to teachers and admin",
+          "maxLength": 150
+        },
+        "status": {
+          "type": "string",
+          "description": "Current lifecycle status of the doubt",
+          "enum": ["open", "answered", "resolved", "needs teacher review"]
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "ISO timestamp of doubt creation"
+        }
+      },
+      "required": ["userId", "questionText", "subject", "isAnonymous", "status", "createdAt"]
+    },
+    "Answer": {
+      "title": "Answer",
+      "description": "Answers posted for a doubt by teacher or AI",
+      "type": "object",
+      "properties": {
+        "doubtId": {
+          "type": "string",
+          "description": "Parent doubt document ID",
+          "maxLength": 128
+        },
+        "userId": {
+          "type": "string",
+          "description": "UID of user who posted the answer",
+          "maxLength": 128
+        },
+        "authorName": {
+          "type": "string",
+          "description": "Display name of the author",
+          "maxLength": 100
+        },
+        "answerText": {
+          "type": "string",
+          "description": "Explanation and solution text",
+          "maxLength": 5000
+        },
+        "source": {
+          "type": "string",
+          "description": "Origin of the answer",
+          "enum": ["ai", "teacher"]
+        },
+        "isVerified": {
+          "type": "boolean",
+          "description": "Whether verified by an educator or admin"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp ISO string"
+        }
+      },
+      "required": ["doubtId", "userId", "answerText", "source", "isVerified", "createdAt"]
+    },
+    "QuizResult": {
+      "title": "QuizResult",
+      "description": "Student practice quiz outcome record",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Student UID",
+          "maxLength": 128
+        },
+        "topic": {
+          "type": "string",
+          "description": "Subject or topic of quiz",
+          "maxLength": 100
+        },
+        "score": {
+          "type": "number",
+          "description": "Number of correct answers"
+        },
+        "total": {
+          "type": "number",
+          "description": "Total number of questions"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp ISO string"
+        }
+      },
+      "required": ["userId", "topic", "score", "total", "createdAt"]
+    },
+    "Report": {
+      "title": "Report",
+      "description": "Community moderation flag on inappropriate doubts",
+      "type": "object",
+      "properties": {
+        "doubtId": {
+          "type": "string",
+          "description": "Flagged doubt ID",
+          "maxLength": 128
+        },
+        "userId": {
+          "type": "string",
+          "description": "UID of reporter",
+          "maxLength": 128
+        },
+        "reason": {
+          "type": "string",
+          "description": "Reason for moderation flag",
+          "maxLength": 500
+        },
+        "status": {
+          "type": "string",
+          "description": "Moderation status",
+          "enum": ["pending", "reviewed", "dismissed"]
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp ISO string"
+        }
+      },
+      "required": ["doubtId", "userId", "reason", "status", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles including role and anonymous alias"
+    },
+    "/doubts/{doubtId}": {
+      "schema": "Doubt",
+      "description": "Doubts asked by students"
+    },
+    "/answers/{answerId}": {
+      "schema": "Answer",
+      "description": "Answers provided for doubts"
+    },
+    "/quizResults/{quizResultId}": {
+      "schema": "QuizResult",
+      "description": "Student self-assessment results"
+    },
+    "/reports/{reportId}": {
+      "schema": "Report",
+      "description": "Content moderation reports"
+    }
+  }
+}

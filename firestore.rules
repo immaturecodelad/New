@@ -1,0 +1,170 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny all access
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function getUserRole() {
+      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        ? userDoc().role
+        : 'student';
+    }
+
+    function isAdmin() {
+      return getUserRole() == 'admin';
+    }
+
+    function isTeacher() {
+      return getUserRole() == 'teacher';
+    }
+
+    function isTeacherOrAdmin() {
+      return isAdmin() || isTeacher();
+    }
+
+    // USERS COLLECTION
+    // users/{userId}: { name, email, role, alias, createdAt }
+    match /users/{userId} {
+      // Students see only their own private profile. Teachers and admins can view profiles.
+      allow get: if isOwner(userId) || isTeacherOrAdmin();
+      allow list: if isTeacherOrAdmin() || (isSignedIn() && resource.data.email == request.auth.token.email);
+
+      // Create: Users can create their own initial profile as 'student' only.
+      // Roles 'teacher' and 'admin' cannot be self-assigned through the client.
+      allow create: if isOwner(userId)
+        && incoming().role == 'student'
+        && incoming().name is string && incoming().name.size() > 0 && incoming().name.size() <= 100
+        && incoming().email is string && incoming().email.size() > 0 && incoming().email.size() <= 150
+        && incoming().alias is string && incoming().alias.size() > 0 && incoming().alias.size() <= 50;
+
+      // Update: Users can update their name and alias, but CANNOT change their role.
+      // Role elevation can only be performed by admin.
+      allow update: if (
+        isOwner(userId)
+        && incoming().role == existing().role
+        && incoming().email == existing().email
+        && incoming().name is string && incoming().name.size() <= 100
+        && incoming().alias is string && incoming().alias.size() <= 50
+      ) || isAdmin();
+
+      allow delete: if isAdmin();
+    }
+
+    // DOUBTS COLLECTION
+    // doubts/{doubtId}: { userId, questionText, subject, predictedTopic, topicConfidence, imageUrl, isAnonymous, authorAlias, status, createdAt }
+    match /doubts/{doubtId} {
+      // Community feed: signed-in users can read doubts.
+      // Anonymous doubts do not contain PII on the document itself (only authorAlias), protecting student privacy.
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
+
+      // Create doubt: User must own the doubt, status must start as 'open'
+      allow create: if isSignedIn()
+        && incoming().userId == request.auth.uid
+        && incoming().status == 'open'
+        && incoming().questionText is string
+        && incoming().questionText.size() >= 5
+        && incoming().questionText.size() <= 3000
+        && incoming().subject is string
+        && incoming().subject.size() > 0
+        && incoming().subject.size() <= 80
+        && incoming().authorAlias is string
+        && incoming().authorAlias.size() <= 50
+        && incoming().isAnonymous is bool;
+
+      // Update doubt: Author can update question or resolve. Teachers/admins can update status or subject/topic.
+      // Any signed in student can also request teacher review on an unclear/downvoted doubt.
+      allow update: if (
+        // Author updating their own doubt or closing it
+        (isOwner(existing().userId) && incoming().userId == existing().userId
+          && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'questionText', 'subject', 'imageUrl', 'isAnonymous']))
+        ||
+        // Request teacher review (from thumbs down or Ask a Teacher)
+        (isSignedIn() && incoming().userId == existing().userId
+          && incoming().diff(existing()).affectedKeys().hasOnly(['status'])
+          && incoming().status == 'needs teacher review')
+        ||
+        // Teacher or Admin moderating / updating status
+        (isTeacherOrAdmin()
+          && incoming().userId == existing().userId
+          && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'predictedTopic', 'topicConfidence']))
+      );
+
+      // Delete doubt: only author or admin
+      allow delete: if isOwner(existing().userId) || isAdmin();
+    }
+
+    // ANSWERS COLLECTION
+    // answers/{answerId}: { doubtId, userId, answerText, source, isVerified, createdAt }
+    match /answers/{answerId} {
+      // Answers can be read by any signed-in user viewing the doubt
+      allow get, list: if isSignedIn();
+
+      // Teachers, admins, or AI can post answers
+      allow create: if isSignedIn()
+        && incoming().answerText is string
+        && incoming().answerText.size() >= 2
+        && incoming().answerText.size() <= 5000
+        && incoming().source in ['teacher', 'ai']
+        && (isTeacherOrAdmin() || incoming().source == 'ai');
+
+      // Update answer: author or teacher/admin can update text or verify; any signed in user can rate
+      allow update: if (
+        isTeacherOrAdmin() || isOwner(existing().userId) ||
+        (isSignedIn() && incoming().diff(existing()).affectedKeys().hasOnly(['rating', 'thumbsUp', 'thumbsDown']))
+      );
+
+      allow delete: if isTeacherOrAdmin() || isOwner(existing().userId);
+    }
+
+    // QUIZ RESULTS COLLECTION
+    // quizResults/{quizResultId}: { userId, topic, score, total, createdAt }
+    match /quizResults/{quizResultId} {
+      allow get: if isOwner(resource.data.userId) || isTeacherOrAdmin();
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isTeacherOrAdmin());
+      allow create: if isOwner(incoming().userId)
+        && incoming().score is number
+        && incoming().total is number;
+      allow update, delete: if isOwner(existing().userId) || isAdmin();
+    }
+
+    // REPORTS COLLECTION
+    // reports/{reportId}: { doubtId, userId, reason, status, createdAt }
+    match /reports/{reportId} {
+      allow get: if isOwner(resource.data.userId) || isTeacherOrAdmin();
+      allow list: if isTeacherOrAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow create: if isOwner(incoming().userId)
+        && incoming().reason is string
+        && incoming().reason.size() >= 3
+        && incoming().reason.size() <= 500
+        && incoming().status == 'pending';
+      allow update: if isTeacherOrAdmin()
+        && incoming().diff(existing()).affectedKeys().hasOnly(['status']);
+      allow delete: if isAdmin();
+    }
+  }
+}

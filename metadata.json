@@ -1,0 +1,6 @@
+{
+  "name": "DoubtMate AI",
+  "description": "Anonymous doubt-solving and learning web app for college students. Ask Freely. Learn Confidently. Grow Together.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
